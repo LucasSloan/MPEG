@@ -24,15 +24,19 @@ void latorgba(unsigned char *b, unsigned char *a,unsigned char *l,int n)
    }
 }
 
-void rgbtorgba(unsigned char *r,unsigned char *g,
-   unsigned char *b,unsigned char *l,int n) 
+void rgbtorgba(unsigned short *r,unsigned short *g,
+   unsigned short *b,unsigned char *l,int n) 
 {
    while (n--) {
-      l[0] = r[0];
-      l[1] = g[0];
-      l[2] = b[0];
-      l[3] = 0xff;
-      l += 4; r++; g++; b++;
+     if (n == 1)
+       printf("R: %x G: %x B: %x\n", r[0], g[0], b[0]);
+     l[0] = (unsigned char) r[0];
+     l[1] = (unsigned char) g[0];
+     l[2] = (unsigned char) b[0];
+     l[3] = 0xff;
+     if (n == 1)
+       printf("RGBA: %x\n", *((unsigned *)l));
+     l += 4; r++; g++; b++;
    }
 }
 
@@ -171,47 +175,22 @@ static void ImageClose(ImageRec *image)
 }
 
 static void ImageGetRow(ImageRec *image, 
-   unsigned char *buf, int y, int z) 
+   unsigned short *buf, int y, int z) 
 {
    unsigned char *iPtr, *oPtr, pixel;
    int count;
 
-   if ((image->type & 0xFF00) == 0x0100) {
-      fseek(image->file, (long)image->rowStart[y+z*image->ysize], SEEK_SET);
-      fread(image->tmp, 1, (unsigned int)image->rowSize[y+z*image->ysize],
-         image->file);
-
-      iPtr = image->tmp;
-      oPtr = buf;
-      for (;;) {
-          pixel = *iPtr++;
-          count = (int)(pixel & 0x7F);
-          if (!count) {
-            return;
-          }
-          if (pixel & 0x80) {
-            while (count--) {
-                *oPtr++ = *iPtr++;
-            }
-         } else {
-            pixel = *iPtr++;
-            while (count--) {
-                *oPtr++ = pixel;
-            }
-         }
-      }
-   } else {
-      fseek(image->file, 512+(y*image->xsize)+(z*image->xsize*image->ysize),
+   fseek(image->file, 512+(y*image->xsize*2)+(z*image->xsize*image->ysize*2),
          SEEK_SET);
-      fread(buf, 1, image->xsize, image->file);
-   }
+   fread(buf, 2, image->xsize, image->file);
+  
 }
 
 unsigned *read_texture(char *name, 
    int *width, int *height, int *components) 
 {
    unsigned *base, *lptr;
-   unsigned char *rbuf, *gbuf, *bbuf, *abuf;
+   unsigned short *rbuf, *gbuf, *bbuf, *abuf;
    ImageRec *image;
    int y;
 
@@ -222,38 +201,23 @@ unsigned *read_texture(char *name,
    (*width)=image->xsize;
    (*height)=image->ysize;
    (*components)=image->zsize;
+
+   printf("Bytes per pixel: %d\n", image->type);
+   printf("Color elements: %d\n", image->zsize);
+
    base = (unsigned *)malloc(image->xsize*image->ysize*sizeof(unsigned));
-   rbuf = (unsigned char *)malloc(image->xsize*sizeof(unsigned char));
-   gbuf = (unsigned char *)malloc(image->xsize*sizeof(unsigned char));
-   bbuf = (unsigned char *)malloc(image->xsize*sizeof(unsigned char));
-   abuf = (unsigned char *)malloc(image->xsize*sizeof(unsigned char));
+   rbuf = (unsigned short *)malloc(image->xsize*sizeof(unsigned short));
+   gbuf = (unsigned short *)malloc(image->xsize*sizeof(unsigned short));
+   bbuf = (unsigned short *)malloc(image->xsize*sizeof(unsigned short));
    if(!base || !rbuf || !gbuf || !bbuf)
       return NULL;
    lptr = base;
    for (y=0; y<image->ysize; y++) {
-      if (image->zsize>=4) {
-         ImageGetRow(image,rbuf,y,0);
-         ImageGetRow(image,gbuf,y,1);
-         ImageGetRow(image,bbuf,y,2);
-         ImageGetRow(image,abuf,y,3);
-         rgbatorgba(rbuf,gbuf,bbuf,abuf,(unsigned char *)lptr,image->xsize);
-         lptr += image->xsize;
-      } else if(image->zsize==3) {
-         ImageGetRow(image,rbuf,y,0);
-         ImageGetRow(image,gbuf,y,1);
-         ImageGetRow(image,bbuf,y,2);
-         rgbtorgba(rbuf,gbuf,bbuf,(unsigned char *)lptr,image->xsize);
-         lptr += image->xsize;
-      } else if(image->zsize==2) {
-         ImageGetRow(image,rbuf,y,0);
-         ImageGetRow(image,abuf,y,1);
-         latorgba(rbuf,abuf,(unsigned char *)lptr,image->xsize);
-         lptr += image->xsize;
-      } else {
-         ImageGetRow(image,rbuf,y,0);
-         bwtorgba(rbuf,(unsigned char *)lptr,image->xsize);
-         lptr += image->xsize;
-      }
+     ImageGetRow(image,rbuf,y,0);
+     ImageGetRow(image,gbuf,y,1);
+     ImageGetRow(image,bbuf,y,2);
+     rgbtorgba(rbuf,gbuf,bbuf,(unsigned char *)lptr,image->xsize);
+     lptr += image->xsize;
    }
    ImageClose(image);
    free(rbuf);
